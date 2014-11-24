@@ -3,13 +3,12 @@ package cn.example.ocrtesseract.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.ContentResolver;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
+import android.graphics.*;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -37,7 +36,7 @@ public class MainActivity extends Activity {
     public Button instrument;
     public ImageView imageView;
     private static final String TESSBASE_PATH = "/mnt/sdcard"; //默认语句库
-    private static final String DEFAULT_LANGUAGE = "eng";
+    private static final String DEFAULT_LANGUAGE = "chi_sim";
     public String IMAGE_PATH;
     boolean isSelectPicture = false;
     private static final int IMAGE_CODE = 100;
@@ -57,24 +56,27 @@ public class MainActivity extends Activity {
         imageView = (ImageView) findViewById(R.id.imageView);
         final String IMAGE_TYPE = "image/*";
         final TessBaseAPI baseApi = new TessBaseAPI();
-        baseApi.init(TESSBASE_PATH, DEFAULT_LANGUAGE);//这个是在真机上的地址
-        //baseApi.init("/storage/emulated/0/", "eng");  //模拟器太变态了
-
+        baseApi.init(TESSBASE_PATH, DEFAULT_LANGUAGE);//这个是在真机上的地址 baseApi.init("/storage/emulated/0/", "eng");  //模拟器太变态了
 
         buttonGetWords.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View sourse) {
                 if (isSelectPicture) {
-                    //设置要ocr的图片bitmap，要解析的图片地址（注意）
-                    baseApi.setImage(getDiskBitmap(IMAGE_PATH));
-                    // baseApi.setImage(getDiskBitmap("/storage/emulated/0/sample.bmp"));
-                    //根据Init的语言，获得ocr后的字符串
-                    String getString = baseApi.getUTF8Text();
-                    editText.setText(getString);
-                    //释放bitmap
-                    baseApi.clear();
+                    new AlertDialog.Builder(MainActivity.this).setTitle("需要很长时间呢~").setPositiveButton("我不怕",
+                            new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    //设置要ocr的图片bitmap，要解析的图片地址（注意）
+                                    baseApi.setImage(getDiskBitmap(IMAGE_PATH));
+                                    //根据Init的语言，获得ocr后的字符串
+                                     String getString = baseApi.getUTF8Text();
+                                    editText.setText(getString);
+                                    //释放bitmap
+                                    baseApi.clear();
+                                }
+                            }).setNegativeButton("那算了吧,再见", null).show();
                 } else {
-                    Toast.makeText(getApplicationContext(), "请选择一张图片", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getApplicationContext(), "首先，你要选择一张图片", Toast.LENGTH_SHORT).show();
                 }
             }
         });
@@ -100,8 +102,6 @@ public class MainActivity extends Activity {
                         // set the image file name
                         intent.putExtra(MediaStore.EXTRA_OUTPUT, fileUri);
                         startActivityForResult(intent, CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE);
-
-
                     }
                 }).show();
             }
@@ -138,8 +138,7 @@ public class MainActivity extends Activity {
                     Uri originalUri = data.getData();        //获得图片的uri
                     bm = MediaStore.Images.Media.getBitmap(resolver, originalUri);
                     Bitmap newBitmap = Narrowpicture(bm, 250, 250); //更改bitmap的大小 合适显示
-                    imageView.setImageBitmap(newBitmap);
-
+                    imageView.setImageBitmap(Tools.bitmap2Gray(newBitmap));
                     //displayBitmapOnText(bm);//将获得的图片添加到EditView里面去 改变方法 添加到ImageView里面
                     String[] proj = {MediaStore.Images.Media.DATA}; //获取图片的路径
 
@@ -164,8 +163,7 @@ public class MainActivity extends Activity {
 
             if (data != null) {
                 //检查是否照片存到内置图库
-                Log.d("TAG", "data is NOT null, file on default position.");
-                Toast.makeText(this, "Image saved to:\n" + data.getData(), Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "没有获得数据", Toast.LENGTH_LONG).show();
                 if (data.hasExtra("data")) {
                     Bitmap thumbnail = data.getParcelableExtra("data");
                     imageView.setImageBitmap(thumbnail);
@@ -176,7 +174,6 @@ public class MainActivity extends Activity {
                 factoryOptions.inJustDecodeBounds = true;
                 BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
                 factoryOptions.inJustDecodeBounds = false;
-                // factoryOptions.inPurgeable = true;
                 Bitmap bitmap = BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
                 String photoPath = String.valueOf(fileUri);
                 String photoDeletePath = "file://";
@@ -255,4 +252,8 @@ public class MainActivity extends Activity {
         return mediaFile;
     }
 }
+
+
+
+
 

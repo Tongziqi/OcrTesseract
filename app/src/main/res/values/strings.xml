@@ -3,5 +3,7 @@
 
     <string name="app_name">OcrTesseract</string>
     <string name="hello_world">Hello world!</string>
+    <string name="getcode">获取中</string>
+    <string name="progressDialog">正在拯救地球可能需要很久...</string>
 
 </resources>
