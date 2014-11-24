@@ -4,7 +4,6 @@ package cn.example.ocrtesseract.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.database.Cursor;
@@ -13,11 +12,8 @@ import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
-import android.text.Editable;
-import android.text.SpannableString;
-import android.text.Spanned;
-import android.text.style.ImageSpan;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -26,6 +22,9 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
 import com.googlecode.tesseract.android.TessBaseAPI;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import java.io.File;
 import java.io.IOException;
@@ -37,13 +36,14 @@ public class MainActivity extends Activity {
     public Button buttonOpenPhotos;
     public Button instrument;
     public ImageView imageView;
-    // private static final String TESSBASE_PATH = "/mnt/sdcard/tesseract"; 默认语句库
+    private static final String TESSBASE_PATH = "/mnt/sdcard"; //默认语句库
     private static final String DEFAULT_LANGUAGE = "eng";
-    //private static final String IMAGE_PATH = "C/mypic.bmp"; //默认路径
     public String IMAGE_PATH;
     boolean isSelectPicture = false;
-    SpannableString mSpan = new SpannableString("1"); //控制textview一些属性
-    final int IMAGE_CODE = 100;
+    private static final int IMAGE_CODE = 100;
+    private static final int CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE = 200;
+    public static final int MEDIA_TYPE_IMAGE = 1;
+    Uri fileUri = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +57,8 @@ public class MainActivity extends Activity {
         imageView = (ImageView) findViewById(R.id.imageView);
         final String IMAGE_TYPE = "image/*";
         final TessBaseAPI baseApi = new TessBaseAPI();
-        baseApi.init("/mnt/sdcard", DEFAULT_LANGUAGE);
+        baseApi.init(TESSBASE_PATH, DEFAULT_LANGUAGE);//这个是在真机上的地址
+        //baseApi.init("/storage/emulated/0/", "eng");  //模拟器太变态了
 
 
         buttonGetWords.setOnClickListener(new OnClickListener() {
@@ -66,6 +67,7 @@ public class MainActivity extends Activity {
                 if (isSelectPicture) {
                     //设置要ocr的图片bitmap，要解析的图片地址（注意）
                     baseApi.setImage(getDiskBitmap(IMAGE_PATH));
+                    // baseApi.setImage(getDiskBitmap("/storage/emulated/0/sample.bmp"));
                     //根据Init的语言，获得ocr后的字符串
                     String getString = baseApi.getUTF8Text();
                     editText.setText(getString);
@@ -80,10 +82,28 @@ public class MainActivity extends Activity {
         buttonOpenPhotos.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent getAlbum = new Intent(Intent.ACTION_GET_CONTENT);
-                getAlbum.setType(IMAGE_TYPE);
-                startActivityForResult(getAlbum, IMAGE_CODE);
-                onActivityResult(RESULT_OK, 100, getAlbum);
+                new AlertDialog.Builder(MainActivity.this).setTitle("请选择从哪儿打开").setNeutralButton("图库", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        Intent getAlbum = new Intent(Intent.ACTION_GET_CONTENT);
+                        getAlbum.setType(IMAGE_TYPE);
+                        startActivityForResult(getAlbum, IMAGE_CODE);
+                        //onActivityResult(RESULT_OK, 100, getAlbum);
+                    }
+                }).setPositiveButton("照相机", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        // create a file to save the image
+                        fileUri = getOutputMediaFileUri(MEDIA_TYPE_IMAGE);
+                        // 此处这句intent的值设置关系到后面的onActivityResult中会进入那个分支，即关系到data是否为null，如果此处指定，则后来的data为null
+                        // set the image file name
+                        intent.putExtra(MediaStore.EXTRA_OUTPUT, fileUri);
+                        startActivityForResult(intent, CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE);
+
+
+                    }
+                }).show();
             }
         });
         instrument.setOnClickListener(new OnClickListener() {
@@ -104,16 +124,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
-
         Bitmap bm;
         ContentResolver resolver = getContentResolver(); //外界的程序访问ContentProvider所提供数据 可以通过ContentResolver接口
         if (requestCode != RESULT_OK) { //判断是否完成该意图
             Log.e("TAG", "ERROR");
         }
-        if (requestCode == 100) {
+        if (requestCode == IMAGE_CODE) {
             try {
                 if (data == null) {
+                    Toast.makeText(MainActivity.this, "没有获得数据", Toast.LENGTH_LONG).show();
                     //Log.e("TAG", "NULL");
                 } else {
                     Uri originalUri = data.getData();        //获得图片的uri
@@ -125,14 +144,14 @@ public class MainActivity extends Activity {
                     String[] proj = {MediaStore.Images.Media.DATA}; //获取图片的路径
 
                     //多媒体数据库封装接口
-                    Cursor cursor = managedQuery(originalUri, proj, null, null, null);
+                    Cursor cursor = getContentResolver().query(originalUri, proj, null, null, null);
                     //获得用户选择的图片的索引值
                     int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
                     //将光标移至开头
                     cursor.moveToFirst();
                     //最后根据索引值获取图片路径
                     String path = cursor.getString(columnIndex);
-                    // Log.e("path", path);
+                    Log.e("path", path);
                     IMAGE_PATH = path;
                     isSelectPicture = true;
                 }
@@ -141,9 +160,35 @@ public class MainActivity extends Activity {
             }
 
         }
+        if (CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE == requestCode) {
+
+            if (data != null) {
+                //检查是否照片存到内置图库
+                Log.d("TAG", "data is NOT null, file on default position.");
+                Toast.makeText(this, "Image saved to:\n" + data.getData(), Toast.LENGTH_LONG).show();
+                if (data.hasExtra("data")) {
+                    Bitmap thumbnail = data.getParcelableExtra("data");
+                    imageView.setImageBitmap(thumbnail);
+                }
+            } else {
+                //存到自己新建图库 然后调整大小
+                BitmapFactory.Options factoryOptions = new BitmapFactory.Options();
+                factoryOptions.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
+                factoryOptions.inJustDecodeBounds = false;
+                // factoryOptions.inPurgeable = true;
+                Bitmap bitmap = BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
+                String photoPath = String.valueOf(fileUri);
+                String photoDeletePath = "file://";
+                IMAGE_PATH = photoPath.replaceAll(photoDeletePath, "");
+                Log.e("path", String.valueOf(IMAGE_PATH));
+                Bitmap newBitmap = Narrowpicture(bitmap, 250, 250); //更改bitmap的大小 合适显示
+                imageView.setImageBitmap(newBitmap);
+                isSelectPicture = true;
+            }
+        }
 
     }
-
 
     private Bitmap getDiskBitmap(String pathString) {
         Bitmap bitmap = null;
@@ -153,30 +198,9 @@ public class MainActivity extends Activity {
                 bitmap = BitmapFactory.decodeFile(pathString);
             }
         } catch (Exception e) {
-            //
+            Log.e("Exception", String.valueOf(e));
         }
         return bitmap;
-    }
-
-    /**
-     * 将获得的图片加载到Text里面去  暂时不用该方法
-     *
-     * @param bitmap 需要加进去的图片
-     */
-    private void displayBitmapOnText(Bitmap bitmap) {
-
-        if (bitmap == null) {
-            return;
-        }
-        int start = editText.getSelectionStart();
-        mSpan.setSpan(new ImageSpan(bitmap), mSpan.length() - 1, mSpan.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        if (editText != null) {
-            Editable et = editText.getText();
-            et.insert(start, mSpan);
-            editText.setText(et);
-            editText.setSelection(start + mSpan.length());
-        }
-        editText.setLineSpacing(10f, 1f);
     }
 
     public static Bitmap Narrowpicture(Bitmap bitmap, int screenWidth, int screenHight) {
@@ -187,10 +211,48 @@ public class MainActivity extends Activity {
         float scale2 = (float) screenHight / h;
         matrix.postScale(scale, scale2);
         Bitmap bmp = Bitmap.createBitmap(bitmap, 0, 0, w, h, matrix, true);
-        if (bitmap != null && !bitmap.equals(bmp) && !bitmap.isRecycled()) {
+        if (!bitmap.equals(bmp) && !bitmap.isRecycled()) {
             bitmap.recycle();
         }
         return bmp;
+    }
+
+    /**
+     * Create a file Uri for saving an image
+     */
+    private static Uri getOutputMediaFileUri(int type) {
+        return Uri.fromFile(getOutputMediaFile(type));
+    }
+
+    /**
+     * Create a File for saving an image
+     */
+    private static File getOutputMediaFile(int type) {
+        // To be safe, you should check that the SDCard is mounted
+        // using Environment.getExternalStorageState() before doing this.
+        File mediaStorageDir = null;
+        try {
+            mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MyCameraApp");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        // Create the storage directory if it does not exist
+        assert mediaStorageDir != null;
+        if (!mediaStorageDir.exists()) {
+            if (!mediaStorageDir.mkdirs()) {
+                return null;
+            }
+        }
+        // Create a media file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        File mediaFile;
+        if (type == MEDIA_TYPE_IMAGE) {
+            mediaFile = new File(mediaStorageDir.getPath() + File.separator
+                    + "IMG_" + timeStamp + ".jpg");
+        } else {
+            return null;
+        }
+        return mediaFile;
     }
 }
 
