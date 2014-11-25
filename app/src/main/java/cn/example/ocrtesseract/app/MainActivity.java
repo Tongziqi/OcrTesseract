@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     private static final int IMAGE_CODE = 100;
     private static final int CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE = 200;
     public static final int MEDIA_TYPE_IMAGE = 1;
+    public static final int MEDIA_PR0CESS_IMAGE = 2;
     Uri fileUri = null;
 
     @Override
@@ -57,6 +58,7 @@ public class MainActivity extends Activity {
         final String IMAGE_TYPE = "image/*";
         final TessBaseAPI baseApi = new TessBaseAPI();
         baseApi.init(TESSBASE_PATH, DEFAULT_LANGUAGE);//这个是在真机上的地址 baseApi.init("/storage/emulated/0/", "eng");  //模拟器太变态了
+        editText.setText("(1)该程序可以识别图片\n" + "(2)首先你要选择(直接打开图库或者拍照)一张图片\n" + "(3)获取过程有点慢,因为为了提高识别率，我会对你选择的图片进行一系列处理\n" + "例如灰度化锐化等等");
 
         buttonGetWords.setOnClickListener(new OnClickListener() {
             @Override
@@ -69,7 +71,7 @@ public class MainActivity extends Activity {
                                     //设置要ocr的图片bitmap，要解析的图片地址（注意）
                                     baseApi.setImage(getDiskBitmap(IMAGE_PATH));
                                     //根据Init的语言，获得ocr后的字符串
-                                     String getString = baseApi.getUTF8Text();
+                                    String getString = baseApi.getUTF8Text();
                                     editText.setText(getString);
                                     //释放bitmap
                                     baseApi.clear();
@@ -135,23 +137,31 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "没有获得数据", Toast.LENGTH_LONG).show();
                     //Log.e("TAG", "NULL");
                 } else {
+
                     Uri originalUri = data.getData();        //获得图片的uri
                     bm = MediaStore.Images.Media.getBitmap(resolver, originalUri);
-                    Bitmap newBitmap = Narrowpicture(bm, 250, 250); //更改bitmap的大小 合适显示
-                    imageView.setImageBitmap(Tools.bitmap2Gray(newBitmap));
-                    //displayBitmapOnText(bm);//将获得的图片添加到EditView里面去 改变方法 添加到ImageView里面
-                    String[] proj = {MediaStore.Images.Media.DATA}; //获取图片的路径
+                    String proPath = processBitmap(MEDIA_PR0CESS_IMAGE);
+                    Bitmap newBitmap = Tools.lineGrey(Tools.bitmap2Gray(bm));
+                    try {
+                        Tools.saveBitmapToFile(Tools.bitmap2Gray(bm), proPath);//对处理后的图片保存
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    Bitmap newNarrowBitmap = Narrowpicture(newBitmap, 250, 250); //更改bitmap的大小 合适显示
+                    imageView.setImageBitmap(newNarrowBitmap);
 
+                    //displayBitmapOnText(bm);//将获得的图片添加到EditView里面去 改变方法 添加到ImageView里面
+                    //String[] proj = {MediaStore.Images.Media.DATA}; //获取图片的路径
                     //多媒体数据库封装接口
-                    Cursor cursor = getContentResolver().query(originalUri, proj, null, null, null);
+                    //Cursor cursor = getContentResolver().query(originalUri, proj, null, null, null);
                     //获得用户选择的图片的索引值
-                    int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                    // int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
                     //将光标移至开头
-                    cursor.moveToFirst();
+                    //cursor.moveToFirst();
                     //最后根据索引值获取图片路径
-                    String path = cursor.getString(columnIndex);
-                    Log.e("path", path);
-                    IMAGE_PATH = path;
+                    //  String path = cursor.getString(columnIndex);
+                    // Log.e("path", path);
+                    IMAGE_PATH = proPath;  //把处理后的path传递给IMAGE_PATH
                     isSelectPicture = true;
                 }
             } catch (IOException e) {
@@ -175,16 +185,36 @@ public class MainActivity extends Activity {
                 BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
                 factoryOptions.inJustDecodeBounds = false;
                 Bitmap bitmap = BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
-                String photoPath = String.valueOf(fileUri);
-                String photoDeletePath = "file://";
-                IMAGE_PATH = photoPath.replaceAll(photoDeletePath, "");
+                String proPath = processBitmap(MEDIA_PR0CESS_IMAGE);
+                Bitmap newBitmap = Tools.lineGrey(Tools.bitmap2Gray(bitmap));
+                try {
+                    Tools.saveBitmapToFile(newBitmap, proPath);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                //IMAGE_PATH = photoPath.replaceAll(photoDeletePath, "");
+                IMAGE_PATH = proPath;
                 Log.e("path", String.valueOf(IMAGE_PATH));
-                Bitmap newBitmap = Narrowpicture(bitmap, 250, 250); //更改bitmap的大小 合适显示
-                imageView.setImageBitmap(newBitmap);
+                Bitmap newNarrowBitmap = Narrowpicture(newBitmap, 250, 250); //更改bitmap的大小 合适显示
+                imageView.setImageBitmap(newNarrowBitmap);
                 isSelectPicture = true;
             }
         }
 
+    }
+
+    private String processBitmap(int i) {
+        fileUri = getOutputMediaFileUri(i);
+        BitmapFactory.Options factoryOptions = new BitmapFactory.Options();
+        factoryOptions.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
+        factoryOptions.inJustDecodeBounds = false;
+        // Bitmap bitmap = BitmapFactory.decodeFile(fileUri.getPath(), factoryOptions);
+        String photoPath = String.valueOf(fileUri);
+        String photoDeletePath = "file://";
+        IMAGE_PATH = photoPath.replaceAll(photoDeletePath, "");
+        Log.e("处理的PATH地址", String.valueOf(IMAGE_PATH));
+        return IMAGE_PATH;
     }
 
     private Bitmap getDiskBitmap(String pathString) {
@@ -246,6 +276,9 @@ public class MainActivity extends Activity {
         if (type == MEDIA_TYPE_IMAGE) {
             mediaFile = new File(mediaStorageDir.getPath() + File.separator
                     + "IMG_" + timeStamp + ".jpg");
+        } else if (type == MEDIA_PR0CESS_IMAGE) {
+            mediaFile = new File(mediaStorageDir.getPath() + File.separator
+                    + "PRO_" + timeStamp + ".jpg");
         } else {
             return null;
         }

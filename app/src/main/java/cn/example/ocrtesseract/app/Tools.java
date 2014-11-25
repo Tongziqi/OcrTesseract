@@ -2,12 +2,11 @@ package cn.example.ocrtesseract.app;
 
 import android.graphics.*;
 import android.graphics.drawable.BitmapDrawable;
+import android.net.Uri;
 import android.os.Environment;
+import android.util.Log;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 
 /**
  * Created by Administrator on 2014/11/24 0024.
@@ -15,6 +14,7 @@ import java.io.IOException;
 public class Tools {
     /**
      * 图像灰度化：
+     *
      * @param bmSrc
      * @return
      */
@@ -39,11 +39,11 @@ public class Tools {
 
     /**
      * 对图像进行线性灰度变化
+     *
      * @param image
      * @return
      */
-    public Bitmap lineGrey(Bitmap image)
-    {
+    public static Bitmap lineGrey(Bitmap image) {
         //得到图像的宽度和长度
         int width = image.getWidth();
         int height = image.getHeight();
@@ -64,8 +64,7 @@ public class Tools {
                 green = (int) (1.1 * green + 30);
                 blue = (int) (1.1 * blue + 30);
                 //对图像像素越界进行处理
-                if (red >= 255)
-                {
+                if (red >= 255) {
                     red = 255;
                 }
 
@@ -87,10 +86,11 @@ public class Tools {
 
     /**
      * 该函数实现对图像进行二值化处理
+     *
      * @param graymap
      * @return
      */
-    public Bitmap gray2Binary(Bitmap graymap) {
+    public static Bitmap gray2Binary(Bitmap graymap) {
         //得到图形的宽度和长度
         int width = graymap.getWidth();
         int height = graymap.getHeight();
@@ -123,6 +123,42 @@ public class Tools {
             }
         }
         return binarymap;
+    }
+
+    /**
+     * Save Bitmap to a file.保存图片到SD卡。
+     *
+     * @param bitmap
+     * @param _file
+     * @return error message if the saving is failed. null if the saving is
+     * successful.
+     * @throws IOException
+     */
+    public static void saveBitmapToFile(Bitmap bitmap, String _file) throws IOException {
+        BufferedOutputStream os = null;
+        try {
+            File file = new File(_file);
+            // String _filePath_file.replace(File.separatorChar +
+            // file.getName(), "");
+            int end = _file.lastIndexOf(File.separator);
+            String _filePath = _file.substring(0, end);
+            File filePath = new File(_filePath);
+            if (!filePath.exists()) {
+                filePath.mkdirs();
+            }
+            file.createNewFile();
+            os = new BufferedOutputStream(new FileOutputStream(file));
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, os);
+            Log.e("保存图片了", _filePath);
+        } finally {
+            if (os != null) {
+                try {
+                    os.close();
+                } catch (IOException e) {
+                    Log.e("TAG_ERROR", e.getMessage(), e);
+                }
+            }
+        }
     }
 }
 
